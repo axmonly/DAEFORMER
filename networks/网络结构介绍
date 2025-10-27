@@ -1,0 +1,125 @@
+第一部分代码：DAEFormer 模型
+这部分代码是完整的模型架构。它定义了 10 个核心类，用于构建一个完整的端到端分割模型。
+
+Cross_Attention
+
+作用：这是一个自定义的**跨注意力（Cross-Attention）**模块，用于在两个不同的输入张量之间建立关系。
+
+内部调用：无（它使用 PyTorch 内置的 F.softmax 和矩阵乘法）。
+
+CrossAttentionBlock
+
+作用：这是一个构建块，它将 Cross_Attention 与一个多层感知机（MLP）和残差连接结合起来，用于在解码器中融合不同尺度的特征。
+
+内部调用：Cross_Attention, MixFFN, MixFFN_skip 或 MLP_FFN（根据 token_mlp 参数选择）。
+
+EfficientAttention
+
+作用：这是一个高效的**自注意力（Self-Attention）**模块，主要用于编码器中，通过对 Q、K、V 进行卷积操作来计算注意力权重。
+
+内部调用：无（它使用 PyTorch 内置的 F.softmax 和矩阵乘法）。
+
+ChannelAttention
+
+作用：这是一个标准的**通道注意力（Channel-Attention）**模块，用于在 Transformer 块内部对通道维度进行加权。
+
+内部调用：无（它使用 PyTorch 内置的线性层和 F.softmax）。
+
+DualTransformerBlock
+
+作用：这是模型的核心构建块，它结合了 EfficientAttention 和 ChannelAttention，构成一个双重注意力结构，用于同时捕获空间和通道维度的信息。
+
+内部调用：EfficientAttention, ChannelAttention, MixFFN 或 MixFFN_skip 或 MLP_FFN。
+
+MiT
+
+作用：这是模型的**编码器（Encoder）**部分，负责逐步对输入图像进行下采样和特征提取。
+
+内部调用：OverlapPatchEmbeddings (来自 networks.segformer), DualTransformerBlock。
+
+PatchExpand
+
+作用：这是一个**上采样（Up-sampling）**模块，用于在解码器中将特征图的分辨率放大两倍。
+
+内部调用：无（它使用 PyTorch 内置的 nn.Linear 和 einops）。
+
+FinalPatchExpand_X4
+
+作用：这是最终的上采样模块，专门用于将解码器最后一层的特征图分辨率放大四倍，以恢复到原始图像尺寸。
+
+内部调用：无（它使用 PyTorch 内置的 nn.Linear 和 einops）。
+
+MyDecoderLayer
+
+作用：这是一个完整的解码器层，用于处理一个解码阶段。它根据是否为最后一层而选择不同的上采样模块。
+
+内部调用：CrossAttentionBlock, PatchExpand, FinalPatchExpand_X4, DualTransformerBlock。
+
+DAEFormer
+
+作用：这是完整的端到端模型，它将编码器 (MiT) 和解码器 (MyDecoderLayer) 组合在一起，并定义了前向传播的完整流程。
+
+内部调用：MiT, MyDecoderLayer。
+
+第二部分代码：可复用模块
+这部分代码是构建 Transformer 模型的基本“工具箱”。它包含了 10 个独立的、可被其他模型调用的模块。
+
+EfficientSelfAtten
+
+作用：一种高效的自注意力机制，通过卷积降低 K 和 V 的空间分辨率来减少计算量。
+
+内部调用：nn.Conv2d 和 nn.LayerNorm。
+
+SelfAtten
+
+作用：一个标准的、没有空间下采样的自注意力模块。
+
+内部调用：无。
+
+Scale_reduce
+
+作用：一个用于对多尺度特征图进行空间下采样的通用模块，以便在 M-EfficientSelfAtten 中使用。
+
+内部调用：nn.Conv2d 和 nn.LayerNorm。
+
+M_EfficientSelfAtten
+
+作用：一个多尺度高效自注意力模块，它可以处理拼接后的多尺度特征，并对它们进行空间下采样。
+
+内部调用：Scale_reduce。
+
+LocalEnhance_EfficientSelfAtten
+
+作用：在 EfficientSelfAtten 的基础上，通过 DWConv 模块额外引入局部位置信息，增强模型的局部感知能力。
+
+内部调用：DWConv。
+
+DWConv
+
+作用：一个**深度可分离卷积（Depthwise Convolution）**模块，通常用于在 FFN 或其他模块中捕获局部特征，同时保持计算效率。
+
+内部调用：nn.Conv2d。
+
+MixFFN
+
+作用：一个混合前馈网络，它在标准的 MLP 结构中加入了 DWConv，以融合局部信息。
+
+内部调用：DWConv。
+
+MixFFN_skip
+
+作用：在 MixFFN 的基础上，增加了残差连接，以帮助梯度更好地流动。
+
+内部调用：DWConv, nn.LayerNorm。
+
+MLP_FFN
+
+作用：一个标准的、不包含卷积的多层感知机（MLP），通常作为 Transformer 块中的前馈网络。
+
+内部调用：无。
+
+MixD_FFN
+
+作用：一个具有不同融合模式的混合前馈网络。
+
+内部调用：DWConv。
